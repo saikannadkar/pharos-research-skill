@@ -14,8 +14,14 @@ os.environ.setdefault("GROQ_API_KEY", "mock-test-key-not-for-production")
 os.environ.setdefault("TAVILY_API_KEY", "mock-test-key-not-for-production")
 
 # import the functions directly (not via MCP)
-from skill.server import search_and_summarize, extract_structured_data, compare_assets, get_pharos_wallet_summary
-
+from skill.server import (
+    search_and_summarize,
+    extract_structured_data,
+    compare_assets,
+    get_pharos_wallet_summary,
+    get_pharos_network_stats,
+    get_pharos_recent_transactions,
+)
 
 def test_search_and_summarize():
     print("\n── Tool 1: search_and_summarize ─────────────────────────")
@@ -120,6 +126,23 @@ def test_get_pharos_wallet_summary():
     assert "PHRS" in result
     assert "**Transaction Count:** 2" in result
     print("✓ PASS")
+    
+def test_get_pharos_network_stats():
+    print("\n── Tool 5: get_pharos_network_stats ─────────────────────")
+    result = get_pharos_network_stats()
+    print(result)
+    assert "Block" in result or "error" in result.lower()
+    print("✓ PASS")
+
+
+def test_get_pharos_recent_transactions():
+    print("\n── Tool 6: get_pharos_recent_transactions ───────────────")
+    result = get_pharos_recent_transactions(
+        "0x0000000000000000000000000000000000000000", limit=3
+    )
+    print(result)
+    assert "transaction" in result.lower() or "error" in result.lower()
+    print("✓ PASS")
 
 
 if __name__ == "__main__":
@@ -127,5 +150,7 @@ if __name__ == "__main__":
     test_extract_structured_data()
     test_compare_assets()
     test_get_pharos_wallet_summary()
+    test_get_pharos_network_stats()
+    test_get_pharos_recent_transactions()
 
     print("\n✓ All tools passed.")

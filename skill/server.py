@@ -236,6 +236,146 @@ def get_pharos_wallet_summary(address: str) -> str:
         f"**Explorer:** {PHAROS_EXPLORER}/address/{address}\n"
     )
 
+# ── tool 5 ────────────────────────────────────────────────────────────────────
+@mcp.tool()
+def get_pharos_network_stats() -> str:
+    """
+    Fetch live network statistics from the Pharos Atlantic Testnet.
+    Returns current block number, gas price, and chain info.
+
+    Returns:
+        A markdown summary of current Pharos network health.
+    """
+    def _rpc(method: str, params: list):
+        resp = requests.post(
+            PHAROS_RPC,
+            json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1},
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "error" in data:
+            raise ValueError(data["error"]["message"])
+        return data["result"]
+
+    try:
+        block_hex    = _rpc("eth_blockNumber", [])
+        gas_hex      = _rpc("eth_gasPrice", [])
+        chain_hex    = _rpc("eth_chainId", [])
+    except requests.exceptions.Timeout:
+        return "Pharos RPC timed out. The testnet may be temporarily slow."
+    except Exception as e:
+        return f"RPC error: {str(e)}"
+
+    block_number = int(block_hex, 16)
+    gas_gwei     = int(gas_hex, 16) / 10**9
+    chain_id     = int(chain_hex, 16)
+
+    return (
+        f"## Pharos Network Stats\n\n"
+        f"**Network:** Pharos Atlantic Testnet\n"
+        f"**Chain ID:** {chain_id}\n"
+        f"**Latest Block:** {block_number:,}\n"
+        f"**Gas Price:** {gas_gwei:.4f} Gwei\n"
+        f"**Explorer:** {PHAROS_EXPLORER}\n"
+        f"**RPC:** {PHAROS_RPC}\n"
+    )
+
+
+# ── tool 6 ────────────────────────────────────────────────────────────────────
+@mcp.tool()
+def get_pharos_recent_transactions(address: str, limit: int = 5) -> str:
+    """
+    Fetch recent transactions for a wallet address on the Pharos Atlantic Testnet.
+    Scans the last 1000 blocks for transactions involving this address.
+
+    Args:
+        address: A valid EVM wallet address (0x...)
+        limit:   Max number of transactions to return (default 5, max 10)
+
+    Returns:
+        A markdown list of recent transactions with hash, block, and value.
+    """
+    if not address.startswith("0x") or len(address) != 42:
+        return "Invalid address. Must be a 42-character hex string starting with 0x."
+
+    limit = min(limit, 10)
+
+    def _rpc(method: str, params: list):
+        resp = requests.post(
+            PHAROS_RPC,
+            json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1},
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "error" in data:
+            raise ValueError(data["error"]["message"])
+        return data["result"]
+
+    try:
+        latest_hex   = _rpc("eth_blockNumber", [])
+        latest_block = int(latest_hex, 16)
+        from_block   = hex(max(0, latest_block - 1000))
+
+        # fetch logs where address is sender or receiver
+        logs = _rpc("eth_getLogs", [{
+            "fromBlock": from_block,
+            "toBlock":   "latest",
+            "address":   None,
+            "topics":    []
+        }])
+
+        # fetch last N blocks and scan for txs involving this address
+        txs = []
+        scan_from = max(0, latest_block - 50)
+
+        for block_num in range(latest_block, scan_from, -1):
+            if len(txs) >= limit:
+                break
+            block = _rpc("eth_getBlockByNumber", [hex(block_num), True])
+            if not block or not block.get("transactions"):
+                continue
+            for tx in block["transactions"]:
+                if (
+                    tx.get("from", "").lower() == address.lower()
+                    or tx.get("to", "").lower() == address.lower()
+                ):
+                    txs.append(tx)
+                    if len(txs) >= limit:
+                        break
+
+    except requests.exceptions.Timeout:
+        return "Pharos RPC timed out. The testnet may be temporarily slow."
+    except Exception as e:
+        return f"RPC error: {str(e)}"
+
+    if not txs:
+        return (
+            f"No recent transactions found for `{address}` "
+            f"in the last 50 blocks.\n\n"
+            f"View full history: {PHAROS_EXPLORER}/address/{address}"
+        )
+
+    lines = [f"## Recent Transactions for `{address}`\n"]
+    for tx in txs:
+        value_phrs = int(tx.get("value", "0x0"), 16) / 10**18
+        direction  = "OUT" if tx.get("from", "").lower() == address.lower() else "IN"
+        block_num  = int(tx.get("blockNumber", "0x0"), 16)
+        tx_hash    = tx.get("hash", "N/A")
+        to_addr    = tx.get("to") or "Contract Deploy"
+
+        lines.append(
+            f"- **{direction}** | Block `{block_num:,}` | "
+            f"`{value_phrs:.4f}` PHRS | "
+            f"[{tx_hash[:16]}...]({PHAROS_EXPLORER}/tx/{tx_hash})"
+        )
+
+    lines.append(f"\n**Full history:** {PHAROS_EXPLORER}/address/{address}")
+    return "\n".join(lines)
+
 
 # ── entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
