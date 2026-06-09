@@ -1,14 +1,17 @@
 """
-Quick smoke tests — run directly to verify your keys work.
+Quick smoke tests for core tool behavior.
 Does NOT require an MCP client. Just: python tests/test_tools.py
 """
 
 import os
 import sys
+from unittest.mock import patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from dotenv import load_dotenv
 load_dotenv()
+os.environ.setdefault("GROQ_API_KEY", "test-key")
+os.environ.setdefault("TAVILY_API_KEY", "test-key")
 
 # import the functions directly (not via MCP)
 from skill.server import search_and_summarize, extract_structured_data, compare_assets, get_pharos_wallet_summary
@@ -16,12 +19,23 @@ from skill.server import search_and_summarize, extract_structured_data, compare_
 
 def test_search_and_summarize():
     print("\n── Tool 1: search_and_summarize ─────────────────────────")
-    result = search_and_summarize(
-        query="Pharos Network blockchain RWA",
-        focus="financial"
-    )
+    with patch("skill.server._search", return_value=[{
+        "title": "Pharos Network Overview",
+        "url": "https://example.com/pharos",
+        "content": "Pharos is an EVM-compatible Layer 1 focused on real-world assets."
+    }]), patch(
+        "skill.server._llm",
+        return_value=(
+            "## Summary\n\nPharos focuses on RWAs and throughput improvements.\n\n"
+            "## Sources\n- https://example.com/pharos"
+        ),
+    ):
+        result = search_and_summarize(
+            query="Pharos Network blockchain RWA",
+            focus="financial"
+        )
     print(result[:600])
-    assert len(result) > 100, "Summary too short"
+    assert "sources" in result.lower(), "Expected sources section in summary"
     print("✓ PASS")
 
 
@@ -33,10 +47,17 @@ def test_extract_structured_data():
     alumni. The network targets 100,000 TPS and is expected to launch mainnet
     in 2026. Official site: pharos.network. Risk level: medium.
     """
-    result = extract_structured_data(
-        text=sample_text,
-        fields="project_name, funding_raised, tps, mainnet_launch, risk_level, website"
-    )
+    with patch(
+        "skill.server._llm",
+        return_value=(
+            '{"project_name":"Pharos","funding_raised":"$8M","tps":"100,000",'
+            '"mainnet_launch":"2026","risk_level":"medium","website":"pharos.network"}'
+        ),
+    ):
+        result = extract_structured_data(
+            text=sample_text,
+            fields="project_name, funding_raised, tps, mainnet_launch, risk_level, website"
+        )
     print(result)
     assert "pharos" in result.lower(), "Expected project name in output"
     print("✓ PASS")
@@ -44,31 +65,56 @@ def test_extract_structured_data():
 
 def test_compare_assets():
     print("\n── Tool 3: compare_assets ───────────────────────────────")
-    result = compare_assets(
-        asset_a="Bitcoin",
-        asset_b="Ethereum",
-        criteria="security, scalability, DeFi ecosystem, RWA support"
-    )
+    with patch(
+        "skill.server._search",
+        side_effect=[
+            [{"title": "Bitcoin Overview", "content": "Strong security and decentralization."}],
+            [{"title": "Ethereum Overview", "content": "Strong DeFi ecosystem and programmability."}],
+        ],
+    ), patch(
+        "skill.server._llm",
+        return_value=(
+            "| Criteria | Bitcoin | Ethereum |\n|---|---|---|\n"
+            "| Security | High | High |\n| Scalability | Lower | Higher |\n\n"
+            "Bitcoin is conservative and secure, while Ethereum supports broader DeFi use cases."
+        ),
+    ):
+        result = compare_assets(
+            asset_a="Bitcoin",
+            asset_b="Ethereum",
+            criteria="security, scalability, DeFi ecosystem, RWA support"
+        )
     print(result[:600])
-    assert len(result) > 100, "Comparison too short"
+    assert "bitcoin" in result.lower() and "ethereum" in result.lower()
     print("✓ PASS")
     
 def test_get_pharos_wallet_summary():
     print("\n── Tool 4: get_pharos_wallet_summary ────────────────────")
-    # using a known testnet address
-    result = get_pharos_wallet_summary("0x0000000000000000000000000000000000000000")
+    class MockResponse:
+        def __init__(self, result):
+            self._result = result
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"result": self._result}
+
+    def fake_post(_url, json, headers, timeout):
+        if json["method"] == "eth_getBalance":
+            return MockResponse("0xde0b6b3a7640000")  # 1 ETH-equivalent
+        if json["method"] == "eth_getTransactionCount":
+            return MockResponse("0x2")
+        return MockResponse("0x0")
+
+    with patch("skill.server.requests.post", side_effect=fake_post):
+        result = get_pharos_wallet_summary("0x0000000000000000000000000000000000000000")
     print(result)
-    assert "PHRS" in result or "error" in result.lower()
+    assert "1.000000 PHRS" in result and "Transaction Count:** 2" in result
     print("✓ PASS")
 
 
 if __name__ == "__main__":
-    missing = [k for k in ["GROQ_API_KEY", "TAVILY_API_KEY"] if not os.getenv(k)]
-    if missing:
-        print(f"ERROR: Missing env vars: {missing}")
-        print("Copy .env.example to .env and fill in your keys.")
-        sys.exit(1)
-
     test_search_and_summarize()
     test_extract_structured_data()
     test_compare_assets()
