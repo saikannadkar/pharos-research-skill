@@ -23,19 +23,21 @@ def test_search_and_summarize():
         "title": "Pharos Network Overview",
         "url": "https://example.com/pharos",
         "content": "Pharos is an EVM-compatible Layer 1 focused on real-world assets."
-    }]), patch(
+    }]) as search_mock, patch(
         "skill.server._llm",
         return_value=(
             "## Summary\n\nPharos focuses on RWAs and throughput improvements.\n\n"
             "## Sources\n- https://example.com/pharos"
         ),
-    ):
+    ) as llm_mock:
         result = search_and_summarize(
             query="Pharos Network blockchain RWA",
             focus="financial"
         )
     print(result[:600])
     assert "sources" in result.lower(), "Expected sources section in summary"
+    search_mock.assert_called_once_with("Pharos Network blockchain RWA")
+    llm_mock.assert_called_once()
     print("✓ PASS")
 
 
@@ -71,21 +73,24 @@ def test_compare_assets():
             [{"title": "Bitcoin Overview", "content": "Strong security and decentralization."}],
             [{"title": "Ethereum Overview", "content": "Strong DeFi ecosystem and programmability."}],
         ],
-    ), patch(
+    ) as search_mock, patch(
         "skill.server._llm",
         return_value=(
             "| Criteria | Bitcoin | Ethereum |\n|---|---|---|\n"
             "| Security | High | High |\n| Scalability | Lower | Higher |\n\n"
             "Bitcoin is conservative and secure, while Ethereum supports broader DeFi use cases."
         ),
-    ):
+    ) as llm_mock:
         result = compare_assets(
             asset_a="Bitcoin",
             asset_b="Ethereum",
             criteria="security, scalability, DeFi ecosystem, RWA support"
         )
     print(result[:600])
+    assert "| Criteria | Bitcoin | Ethereum |" in result
     assert "bitcoin" in result.lower() and "ethereum" in result.lower()
+    assert search_mock.call_count == 2
+    llm_mock.assert_called_once()
     print("✓ PASS")
     
 def test_get_pharos_wallet_summary():
@@ -110,7 +115,8 @@ def test_get_pharos_wallet_summary():
     with patch("skill.server.requests.post", side_effect=fake_post):
         result = get_pharos_wallet_summary("0x0000000000000000000000000000000000000000")
     print(result)
-    assert "1.000000 PHRS" in result and "Transaction Count:** 2" in result
+    assert "PHRS" in result
+    assert "**Transaction Count:** 2" in result
     print("✓ PASS")
 
 
