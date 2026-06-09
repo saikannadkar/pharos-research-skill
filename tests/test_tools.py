@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from dotenv import load_dotenv
 load_dotenv()
-os.environ.setdefault("GROQ_API_KEY", "test-key")
-os.environ.setdefault("TAVILY_API_KEY", "test-key")
+os.environ.setdefault("GROQ_API_KEY", "mock-test-key-not-for-production")
+os.environ.setdefault("TAVILY_API_KEY", "mock-test-key-not-for-production")
 
 # import the functions directly (not via MCP)
 from skill.server import search_and_summarize, extract_structured_data, compare_assets, get_pharos_wallet_summary
