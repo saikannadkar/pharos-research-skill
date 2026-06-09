@@ -107,10 +107,10 @@ def test_get_pharos_wallet_summary():
 
     def fake_post(url, **kwargs):
         assert url == "https://atlantic.dplabs-internal.com"
-        json = kwargs["json"]
-        if json["method"] == "eth_getBalance":
+        payload = kwargs["json"]
+        if payload["method"] == "eth_getBalance":
             return MockResponse("0xde0b6b3a7640000")  # 1 ETH-equivalent
-        if json["method"] == "eth_getTransactionCount":
+        if payload["method"] == "eth_getTransactionCount":
             return MockResponse("0x2")
         return MockResponse("0x0")
 
