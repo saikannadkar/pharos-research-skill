@@ -8,6 +8,7 @@ Exposes 3 tools for AI agents:
 
 import os
 import json
+import requests
 from mcp.server.fastmcp import FastMCP
 from groq import Groq
 from tavily import TavilyClient
@@ -15,6 +16,10 @@ from dotenv import load_dotenv
 from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
+# ── Pharos testnet config ─────────────────────────────────────────────────────
+PHAROS_RPC      = "https://atlantic.dplabs-internal.com"
+PHAROS_CHAIN_ID = 688689
+PHAROS_EXPLORER = "https://atlantic.pharosscan.xyz"
 # ── clients ──────────────────────────────────────────────────────────────────
 groq   = Groq(api_key=os.environ["GROQ_API_KEY"])
 tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
@@ -178,6 +183,58 @@ def compare_assets(asset_a: str, asset_b: str, criteria: str = "") -> str:
     )
 
     return comparison
+
+
+# ── tool 4 ────────────────────────────────────────────────────────────────────
+@mcp.tool()
+def get_pharos_wallet_summary(address: str) -> str:
+    """
+    Fetch live onchain data for a wallet address on the Pharos testnet.
+    Returns native PHRS balance and current transaction count.
+
+    Args:
+        address: A valid EVM wallet address (0x...)
+
+    Returns:
+        A summary string with balance, tx count, and explorer link.
+    """
+    if not address.startswith("0x") or len(address) != 42:
+        return "Invalid address. Must be a 42-character hex string starting with 0x."
+
+    def _rpc(method: str, params: list):
+        resp = requests.post(
+            PHAROS_RPC,
+            json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1},
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "error" in data:
+            raise ValueError(data["error"]["message"])
+        return data["result"]
+
+    try:
+        balance_hex  = _rpc("eth_getBalance",      [address, "latest"])
+        tx_count_hex = _rpc("eth_getTransactionCount", [address, "latest"])
+    except requests.exceptions.Timeout:
+        return "Pharos RPC timed out. The testnet may be temporarily slow."
+    except Exception as e:
+        return f"RPC error: {str(e)}"
+
+    # convert hex wei → PHRS (18 decimals)
+    balance_wei  = int(balance_hex, 16)
+    balance_phrs = balance_wei / 10**18
+    tx_count     = int(tx_count_hex, 16)
+
+    return (
+        f"## Pharos Wallet Summary\n\n"
+        f"**Address:** `{address}`\n"
+        f"**Balance:** {balance_phrs:.6f} PHRS\n"
+        f"**Transaction Count:** {tx_count}\n"
+        f"**Network:** Pharos Testnet (Chain ID: {PHAROS_CHAIN_ID})\n"
+        f"**Explorer:** {PHAROS_EXPLORER}/address/{address}\n"
+    )
 
 
 # ── entry point ───────────────────────────────────────────────────────────────

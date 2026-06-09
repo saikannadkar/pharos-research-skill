@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # import the functions directly (not via MCP)
-from skill.server import search_and_summarize, extract_structured_data, compare_assets
+from skill.server import search_and_summarize, extract_structured_data, compare_assets, get_pharos_wallet_summary
 
 
 def test_search_and_summarize():
@@ -52,6 +52,14 @@ def test_compare_assets():
     print(result[:600])
     assert len(result) > 100, "Comparison too short"
     print("✓ PASS")
+    
+def test_get_pharos_wallet_summary():
+    print("\n── Tool 4: get_pharos_wallet_summary ────────────────────")
+    # using a known testnet address
+    result = get_pharos_wallet_summary("0x0000000000000000000000000000000000000000")
+    print(result)
+    assert "PHRS" in result or "error" in result.lower()
+    print("✓ PASS")
 
 
 if __name__ == "__main__":
@@ -64,5 +72,6 @@ if __name__ == "__main__":
     test_search_and_summarize()
     test_extract_structured_data()
     test_compare_assets()
+    test_get_pharos_wallet_summary()
 
     print("\n✓ All tools passed.")
