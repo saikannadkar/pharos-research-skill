@@ -5,7 +5,7 @@ Does NOT require an MCP client. Just: python tests/test_tools.py
 
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from dotenv import load_dotenv
 load_dotenv()

@@ -11,12 +11,15 @@ import json
 from mcp.server.fastmcp import FastMCP
 from groq import Groq
 from tavily import TavilyClient
+from dotenv import load_dotenv
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
 
 # ── clients ──────────────────────────────────────────────────────────────────
 groq   = Groq(api_key=os.environ["GROQ_API_KEY"])
 tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
 
-MODEL = "llama3-70b-8192"
+MODEL = "llama-3.3-70b-versatile"
 
 mcp = FastMCP("pharos-research-skill")
 
@@ -31,7 +34,8 @@ def _llm(system: str, user: str) -> str:
         ],
         temperature=0.2,
     )
-    return resp.choices[0].message.content.strip()
+    content = resp.choices[0].message.content
+    return content.strip() if content else ""
 
 
 def _search(query: str, max_results: int = 5) -> list[dict]:
