@@ -100,12 +100,14 @@ def test_get_pharos_wallet_summary():
             self._result = result
 
         def raise_for_status(self):
-            return None
+            pass
 
         def json(self):
             return {"result": self._result}
 
-    def fake_post(_url, json, headers, timeout):
+    def fake_post(url, **kwargs):
+        assert url == "https://atlantic.dplabs-internal.com"
+        json = kwargs["json"]
         if json["method"] == "eth_getBalance":
             return MockResponse("0xde0b6b3a7640000")  # 1 ETH-equivalent
         if json["method"] == "eth_getTransactionCount":
